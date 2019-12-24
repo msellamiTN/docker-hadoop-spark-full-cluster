@@ -1,0 +1,231 @@
+version: "3"
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.1.1-java8
+    container_name: namenode
+    ports:
+      - 9870:9870 # UI
+      - 9000:9000 # hdfs api
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.5
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.1.1-java8
+    container_name: datanode
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.6
+  
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.1.1-java8
+    container_name: resourcemanager
+    ports:
+      - 8088:8088 # UI
+      - 8032:8032
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864"
+    env_file:
+      - ./hadoop.env
+   networks:
+      net_pet:
+        ipv4_address: 172.27.1.7
+  nodemanager:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.1.1-java8
+    container_name: nodemanager
+    ports:
+      - 8042:8042
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+   networks:
+      net_pet:
+        ipv4_address: 172.27.1.8
+  historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.1.1-java8
+    container_name: historyserver
+    ports:
+      - 8188:8188 # UI
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 resourcemanager:8088"
+    volumes:
+      - hadoop_historyserver:/hadoop/yarn/timeline
+    env_file:
+      - ./hadoop.env
+   networks:
+      net_pet:
+        ipv4_address: 172.27.1.9
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    env_file:
+      - ./hadoop-hive.env
+    environment:
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:postgresql://hive-metastore/metastore"
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+    ports:
+      - "10000:10000"
+   networks:
+      net_pet:
+        ipv4_address: 172.27.1.10
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    env_file:
+      - ./hadoop-hive.env
+    command: /opt/hive/bin/hive --service metastore
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 hive-metastore-postgresql:5432"
+    ports:
+      - "9083:9083"
+   networks:
+      net_pet:
+        ipv4_address: 172.27.1.11	
+  hive-metastore-postgresql:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+   networks:
+      net_pet:
+        ipv4_address: 172.27.1.12	
+  # presto-coordinator:
+  #   image: shawnzhu/prestodb:0.181
+  #   ports:
+  #     - "8080:8080"
+  
+spark-worker:
+    image: bde2020/spark-worker:2.4.0-hadoop2.7
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://hive-metastore/metastore
+    depends_on:
+      - spark-master
+    ports:
+      - 8081:8081
+    env_file:
+      - ./hadoop-hive.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.13
+  spark-worker-2:
+    image: bde2020/spark-worker:2.4.0-hadoop2.7
+    container_name: spark-worker-2
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://hive-metastore/metastore
+    depends_on:
+      - spark-master
+    ports:
+      - 8086:8086
+    env_file:
+      - ./hadoop-hive.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.14
+  spark-worker-3:
+    image: bde2020/spark-worker:2.4.0-hadoop2.7
+    container_name: spark-worker-3
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://hive-metastore/metastore
+    depends_on:
+      - spark-master
+    ports:
+      - 8087:8087
+    env_file:
+      - ./hadoop-hive.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.15
+  zeppelin:
+    image: openkbs/docker-spark-bde2020-zeppelin
+    container_name: zeppelin
+    environment:
+      CORE_CONF_fs_defaultFS: "hdfs://namenode:8020"
+      SPARK_MASTER: "spark://spark-master:7077"
+      MASTER: "spark://spark-master:7077"
+      SPARK_MASTER_URL: spark://spark-master:7077
+      ZEPPELIN_PORT: 8080
+      ZEPPELIN_JAVA_OPTS:
+        -Dspark.driver.memory=1g
+        -Dspark.executor.memory=2g
+    ports:
+      - 19090:8080
+    env_file:
+      - ./hadoop-hive.env
+    volumes:
+      - /tmp/simple-demo/zeppelin/data:/usr/lib/zeppelin/data:rw
+      - /tmp/simple-demo/zeppelin/notebook:/usr/lib/zeppelin/notebook:rw
+    command: /usr/lib/zeppelin/bin/zeppelin.sh
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.16
+
+  hue:
+      image: gethue/hue
+      hostname: hue
+      container_name: hue
+      dns: 8.8.8.8
+      ports:
+      - "8888:8888"
+      volumes:
+        - ./hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
+      depends_on:
+      - "database"
+      networks:
+        net_pet:
+          ipv4_address: 172.27.1.17
+  
+  database:
+      image: mysql:5.7
+      container_name: database
+      ports:
+          - "33061:3306"
+      command: --init-file /data/application/init.sql
+      volumes:
+          - /tmp/mysql/data:/var/lib/mysql
+          - ./init.sql:/data/application/init.sql
+      environment:
+          MYSQL_ROOT_USER: root
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: hue
+          MYSQL_USER: root
+          MYSQL_PASSWORD: secret
+      networks:
+        net_pet:
+          ipv4_address: 172.27.1.18
+ 
+
+networks:
+  net_pet:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.27.0.0/16
+
+
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+  hadoop_historyserver:
